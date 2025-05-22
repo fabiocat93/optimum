@@ -1272,6 +1272,7 @@ class TasksManager:
         "wav2vec2": supported_tasks_mapping(
             "feature-extraction",
             "automatic-speech-recognition",
+            "automatic-speech-recognition-with-past",
             "audio-classification",
             "audio-frame-classification",
             "audio-xvector",
@@ -2422,3 +2423,8 @@ class TasksManager:
             exporter_config_constructor = partial(exporter_config_constructor, **exporter_config_kwargs)
 
         return exporter_config_constructor
+
+# Register the with-past ONNX config for wav2vec2
+TasksManager.create_register("onnx")(
+    "wav2vec2", "automatic-speech-recognition-with-past"
+)(importlib.import_module("optimum.exporters.onnx.model_configs").Wav2Vec2OnnxConfigWithPast)
