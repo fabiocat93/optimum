@@ -1680,6 +1680,66 @@ class Wav2Vec2OnnxConfig(HubertOnnxConfig):
     DEFAULT_ONNX_OPSET = 14  # now uses F.scaled_dot_product_attention by default for torch>=2.1.1.
 
 
+class Wav2Vec2OnnxConfigWithPast(OnnxConfigWithPast):
+    """
+    ONNX config for Wav2Vec2 with support for past key values (for streaming/real-time ASR).
+    """
+    DEFAULT_ONNX_OPSET = 14
+
+    def __init__(
+        self,
+        config: "PretrainedConfig",
+        task: str = "automatic-speech-recognition-with-past",
+        int_dtype: str = "int64",
+        float_dtype: str = "fp32",
+        use_past: bool = True,
+        use_past_in_inputs: bool = True,
+        preprocessors: Optional[List[Any]] = None,
+        legacy: bool = False,
+    ):
+        super().__init__(
+            config=config,
+            task=task,
+            int_dtype=int_dtype,
+            float_dtype=float_dtype,
+            use_past=use_past,
+            use_past_in_inputs=use_past_in_inputs,
+            preprocessors=preprocessors,
+            legacy=legacy,
+        )
+
+    @property
+    def inputs(self) -> Dict[str, Dict[int, str]]:
+        # Standard Wav2Vec2 input plus past_key_values if use_past_in_inputs
+        inputs = {
+            "input_values": {0: "batch_size", 1: "sequence_length"},
+            "attention_mask": {0: "batch_size", 1: "sequence_length"},
+        }
+        if self.use_past_in_inputs:
+            # Add past_key_values for each layer
+            for i in range(self._normalized_config.num_layers):
+                inputs[f"past_key_values.{i}.key"] = {0: "batch_size", 2: "past_sequence_length"}
+                inputs[f"past_key_values.{i}.value"] = {0: "batch_size", 2: "past_sequence_length"}
+        return inputs
+
+    @property
+    def outputs(self) -> Dict[str, Dict[int, str]]:
+        # Standard logits plus present key values if use_past
+        outputs = OrderedDict({"logits": {0: "batch_size", 1: "sequence_length"}})
+        if self.use_past:
+            for i in range(self._normalized_config.num_layers):
+                outputs[f"present.{i}.key"] = {0: "batch_size", 2: "past_sequence_length + sequence_length"}
+                outputs[f"present.{i}.value"] = {0: "batch_size", 2: "past_sequence_length + sequence_length"}
+        return outputs
+
+    @property
+    def values_override(self) -> Optional[Dict[str, Any]]:
+        # Enable cache in config if available
+        if hasattr(self._config, "use_cache"):
+            return {"use_cache": True}
+        return None
+
+
 class Wav2Vec2ConformerOnnxConfig(HubertOnnxConfig):
     DEFAULT_ONNX_OPSET = 11
 
